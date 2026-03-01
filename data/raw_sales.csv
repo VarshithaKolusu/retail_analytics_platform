@@ -1,0 +1,6 @@
+order_no,order_date,item,units_sold,price_per_unit,store,customer_type
+A101,2024-01-01,Milk,2,30,Hyderabad,Regular
+A102,2024-01-01,Bread,1,25,Bangalore,New
+A103,2024-01-02,Eggs,12,6,Hyderabad,Regular
+A104,2024-01-03,Butter,1,50,Chennai,New
+A105,2024-01-03,Milk,3,30,Bangalore,Regular

@@ -1,0 +1,6 @@
+order_id,date,product,quantity,price,store,customer_type,total_sales
+A101,2024-01-01,Milk,2,30.0,Hyderabad,Regular,60.0
+A102,2024-01-01,Bread,1,25.0,Bangalore,New,25.0
+A103,2024-01-02,Eggs,12,6.0,Hyderabad,Regular,72.0
+A104,2024-01-03,Butter,1,50.0,Chennai,New,50.0
+A105,2024-01-03,Milk,3,30.0,Bangalore,Regular,90.0
