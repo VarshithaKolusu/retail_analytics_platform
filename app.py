@@ -1,9 +1,43 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
+from collections import Counter
+from textblob import TextBlob
 
 st.set_page_config(page_title="Retail & Customer Intelligence", layout="wide")
 st.title("📊 Retail & Customer Intelligence Dashboard")
+
+# =============================
+# SENTIMENT FUNCTION
+# =============================
+def get_sentiment(text):
+    score = TextBlob(str(text)).sentiment.polarity
+    if score > 0.1:
+        return "Positive"
+    elif score < -0.1:
+        return "Negative"
+    else:
+        return "Neutral"
+
+# =============================
+# STOPWORDS (REMOVE USELESS WORDS)
+# =============================
+stopwords = {
+    "the","and","that","this","with","have","they","them","from",
+    "amazon","were","been","being","there","their","about",
+    "would","could","should","after","before","when","where",
+    "your","very","really","also","just","into","over","more",
+    "will","than","then","because","while","what","which"
+}
+
+def extract_keywords(text_series):
+    words = []
+    for text in text_series:
+        tokens = re.findall(r"\b[a-z]{4,}\b", str(text).lower())
+        meaningful = [w for w in tokens if w not in stopwords]
+        words.extend(meaningful)
+    return Counter(words).most_common(10)
 
 # =============================
 # FILE UPLOAD
@@ -48,10 +82,8 @@ if uploaded_file is not None:
         df["sales"] = pd.to_numeric(df["sales"], errors="coerce")
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce")
 
-        # revenue = price × quantity
         df["sales"] = df["sales"] * df["quantity"]
 
-        # clean
         df = df.dropna(subset=["customer_id", "sales", "quantity", "date"])
         df = df[df["quantity"] > 0]
         df = df[df["sales"] > 0]
@@ -66,7 +98,9 @@ if "mapped_df" in st.session_state:
 
     df = st.session_state["mapped_df"]
 
-    tab1, tab2 = st.tabs(["🛍 Retail & Segmentation", "🔮 Churn"])
+    tab1, tab2, tab3 = st.tabs(
+        ["🛍 Retail & Segmentation", "🔮 Churn", "🧠 Sentiment"]
+    )
 
     # ======================================
     # TAB 1 — RETAIL + SEGMENTATION
@@ -80,9 +114,6 @@ if "mapped_df" in st.session_state:
         c2.metric("Orders", df["order_id"].nunique())
         c3.metric("Customers", df["customer_id"].nunique())
 
-        # ----------------------------
-        # TOP PRODUCTS
-        # ----------------------------
         st.subheader("Top Products")
         top_products = (
             df.groupby("product")["sales"]
@@ -92,9 +123,6 @@ if "mapped_df" in st.session_state:
         )
         st.bar_chart(top_products)
 
-        # ----------------------------
-        # IMPROVED MONTHLY TREND
-        # ----------------------------
         st.subheader("Monthly Sales Trend")
 
         df["month"] = df["date"].dt.to_period("M").astype(str)
@@ -112,9 +140,6 @@ if "mapped_df" in st.session_state:
             monthly_sales.set_index("month")["avg_order_value"]
         )
 
-        # =====================
-        # CUSTOMER AGGREGATION
-        # =====================
         st.subheader("Customer Aggregation")
 
         customer_df = df.groupby("customer_id").agg(
@@ -133,11 +158,8 @@ if "mapped_df" in st.session_state:
             max_date - customer_df["last_purchase"]
         ).dt.days
 
-        st.dataframe(customer_df.head())
+        st.dataframe(customer_df.head(), use_container_width=True)
 
-        # =====================
-        # BETTER SEGMENTATION
-        # =====================
         st.subheader("Customer Segmentation")
 
         customer_df["segment"] = pd.qcut(
@@ -192,5 +214,53 @@ if "mapped_df" in st.session_state:
         inactive = customer_df.groupby("churn")["inactive_days"].mean()
         st.bar_chart(inactive)
 
+    # ======================================
+    # TAB 3 — SENTIMENT
+    # ======================================
+    with tab3:
+
+        st.header("Amazon Review Insights")
+
+        uploaded_reviews = st.file_uploader(
+            "Upload Amazon Reviews CSV",
+            type=["csv"],
+            key="reviews"
+        )
+
+        if uploaded_reviews is not None:
+            reviews = pd.read_csv(
+                uploaded_reviews,
+                encoding="ISO-8859-1",
+                on_bad_lines="skip",
+                engine="python"
+            )
+
+            if "Review Text" not in reviews.columns:
+                st.error("CSV must contain 'Review Text'")
+            else:
+                reviews["sentiment"] = reviews["Review Text"].apply(get_sentiment)
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Reviews", len(reviews))
+                c2.metric("Positive", (reviews["sentiment"]=="Positive").sum())
+                c3.metric("Negative", (reviews["sentiment"]=="Negative").sum())
+                c4.metric("Neutral", (reviews["sentiment"]=="Neutral").sum())
+
+                st.subheader("🔴 Top Customer Pain Points")
+                neg_reviews = reviews[reviews["sentiment"]=="Negative"]["Review Text"].dropna()
+                pain = extract_keywords(neg_reviews)
+                pain_df = pd.DataFrame(pain, columns=["Issue","Mentions"])
+                st.dataframe(pain_df, use_container_width=True)
+
+                st.subheader("🟢 What Customers Love")
+                pos_reviews = reviews[reviews["sentiment"]=="Positive"]["Review Text"].dropna()
+                love = extract_keywords(pos_reviews)
+                love_df = pd.DataFrame(love, columns=["Aspect","Mentions"])
+                st.dataframe(love_df, use_container_width=True)
+
+                st.subheader("Critical Reviews")
+                worst = reviews[reviews["sentiment"]=="Negative"][["Review Text"]].head(10)
+                st.dataframe(worst, use_container_width=True)
+
 else:
-    st.info("Upload CSV and apply column mapping to start analysis.")
+    st.info("Upload CSV and apply mapping to start analysis.")
